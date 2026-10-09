@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Time Productivity & Task Allocation Tracker</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    .badge { transition: all 0.2s ease; }
+    .badge:hover { transform: translateY(-1px); }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800 antialiased min-h-screen pb-16">
+
+  <!-- 頂部導航 -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex flex-wrap justify-between items-center gap-3">
+      <div>
+        <h1 class="text-xl font-bold text-slate-900 flex items-center gap-2">
+          <span>⏱️</span> 專注時間追蹤與任務管理
+        </h1>
+        <p class="text-xs text-slate-500">Today Focus & Backlog × Google Sheets 跨裝置同步</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <button onclick="toggleCloudModal()" id="cloudStatusBtn" class="px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 flex items-center gap-1.5 transition">
+          <span id="cloudIcon" class="w-2 h-2 rounded-full bg-slate-400"></span>
+          <span id="cloudText">設定 Google Sheets</span>
+        </button>
+        <button onclick="syncFromCloud()" title="從 Google Sheets 更新" class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition">
+          🔄 雲端同步
+        </button>
+        <button onclick="exportCSV()" class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-800 text-white hover:bg-slate-700 transition">
+          📥 匯出 CSV
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-4 py-6 space-y-6">
+
+    <!-- 區塊 1: 任務規劃區 (Task Management: Today vs Backlog) -->
+    <section class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
+      <div class="flex flex-wrap justify-between items-center gap-2 mb-4">
+        <div>
+          <h2 class="text-base font-bold text-slate-900 flex items-center gap-2">
+            <span>📋</span> 任務規劃池 (Task Planner)
+          </h2>
+          <p class="text-xs text-slate-500">開工前規劃 Today Focus，未做嘅擺入 Backlog，隨時一鍵排程</p>
+        </div>
+      </div>
+
+      <!-- 快速輸入任務表單 -->
+      <div class="bg-slate-50 border border-slate-200 rounded-xl p-3.5 mb-4 space-y-3">
+        <!-- 常用任務快捷鍵 (Presets) -->
+        <div class="flex flex-wrap items-center gap-1.5">
+          <span class="text-xs font-medium text-slate-400 mr-1">快捷任務:</span>
+          <button onclick="setQuickTask('Idea brainstorm')" class="badge text-xs bg-white border border-slate-200 px-2.5 py-1 rounded-md hover:border-indigo-400 hover:text-indigo-600">💡 Idea brainstorm</button>
+          <button onclick="setQuickTask('Reply Client')" class="badge text-xs bg-white border border-slate-200 px-2.5 py-1 rounded-md hover:border-indigo-400 hover:text-indigo-600">💬 Reply Client</button>
+          <button onclick="setQuickTask('Ad hoc work')" class="badge text-xs bg-white border border-slate-200 px-2.5 py-1 rounded-md hover:border-indigo-400 hover:text-indigo-600">⚡ Ad hoc work</button>
+          <button onclick="setQuickTask('Order entry')" class="badge text-xs bg-white border border-slate-200 px-2.5 py-1 rounded-md hover:border-indigo-400 hover:text-indigo-600">📦 Order entry</button>
+          <button onclick="setQuickTask('Graphic preparation')" class="badge text-xs bg-white border border-slate-200 px-2.5 py-1 rounded-md hover:border-indigo-400 hover:text-indigo-600">🎨 Graphic preparation</button>
+          <button onclick="setQuickTask('Data analytics')" class="badge text-xs bg-white border border-slate-200 px-2.5 py-1 rounded-md hover:border-indigo-400 hover:text-indigo-600">📊 Data analytics</button>
+          <button onclick="setQuickTask('Content creation')" class="badge text-xs bg-white border border-slate-200 px-2.5 py-1 rounded-md hover:border-indigo-400 hover:text-indigo-600">✍️ Content creation</button>
+          <button onclick="setQuickTask('Rest')" class="badge text-xs bg-white border border-slate-200 px-2.5 py-1 rounded-md hover:border-indigo-400 hover:text-indigo-600">☕ Rest</button>
+        </div>
+
+        <form id="addTaskForm" onsubmit="handleAddTask(event)" class="grid grid-cols-1 md:grid-cols-12 gap-2">
+          <div class="md:col-span-5">
+            <input type="text" id="taskTitleInput" placeholder="任務名稱 (例如: 撰寫推廣文案、整理訂單...)" required
+              class="w-full text-sm px-3 py-2 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          </div>
+          <div class="md:col-span-4">
+            <input type="text" id="taskDetailsInput" placeholder="補充細節 / 備註 (選填)"
+              class="w-full text-sm px-3 py-2 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          </div>
+          <div class="md:col-span-3 flex gap-2">
+            <select id="taskTargetList" class="text-sm px-2.5 py-2 bg-white border border-slate-300 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              <option value="today">今日執行 (Today)</option>
+              <option value="backlog">稍後待辦 (Backlog)</option>
+            </select>
+            <button type="submit" class="flex-1 text-sm font-semibold bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">
+              + 新增
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <!-- 雙欄清單：今日執行 vs 稍後待辦 -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        
+        <!-- 左欄: 今日執行 (Today Focus) -->
+        <div class="border border-indigo-100 bg-indigo-50/30 rounded-xl p-3.5 flex flex-col h-[320px]">
+          <div class="flex justify-between items-center mb-2 pb-2 border-b border-indigo-100">
+            <div class="flex items-center gap-1.5">
+              <span class="w-2.5 h-2.5 rounded-full bg-indigo-600"></span>
+              <h3 class="text-xs font-bold text-slate-800 uppercase tracking-wider">今日執行 (Today Focus)</h3>
+              <span id="todayCount" class="text-xs bg-indigo-100 text-indigo-700 px-1.5 py-0.2 rounded-full font-semibold">0</span>
+            </div>
+            <span class="text-[11px] text-slate-400">計時器優先載入</span>
+          </div>
+          <div id="todayTaskList" class="flex-1 overflow-y-auto space-y-2 pr-1">
+            <!-- 動態渲染今日任務 -->
+          </div>
+        </div>
+
+        <!-- 右欄: 稍後待辦 (Backlog / Later) -->
+        <div class="border border-slate-200 bg-slate-50/50 rounded-xl p-3.5 flex flex-col h-[320px]">
+          <div class="flex justify-between items-center mb-2 pb-2 border-b border-slate-200">
+            <div class="flex items-center gap-1.5">
+              <span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+              <h3 class="text-xs font-bold text-slate-800 uppercase tracking-wider">稍後待辦 (Backlog / Later)</h3>
+              <span id="backlogCount" class="text-xs bg-amber-100 text-amber-800 px-1.5 py-0.2 rounded-full font-semibold">0</span>
+            </div>
+            <span class="text-[11px] text-slate-400">未來幾日／想法備忘</span>
+          </div>
+          <div id="backlogTaskList" class="flex-1 overflow-y-auto space-y-2 pr-1">
+            <!-- 動態渲染 Backlog 任務 -->
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- 區塊 2: 極簡碼錶計時器 (Stopwatch Timer Section) -->
+    <section class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+      <div class="grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
+        
+        <!-- 左邊: 選擇目前專注任務 -->
+        <div class="md:col-span-5 space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold uppercase tracking-wider text-indigo-600">當前鎖定任務</span>
+            <span class="text-xs text-slate-400">由今日清單選取或直接輸入</span>
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-slate-500 mb-1">從今日清單選取 (Today List)</label>
+            <select id="timerTaskSelect" onchange="handleSelectPlannedTask(this.value)" class="w-full text-sm px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium">
+              <option value="">-- 自訂或自由輸入 --</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-slate-500 mb-1">任務名稱 (Task Title)</label>
+            <input type="text" id="activeTaskInput" placeholder="請先選擇或輸入任務名稱..."
+              class="w-full text-sm font-semibold px-3 py-2 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-slate-500 mb-1">細節備註 (Notes)</label>
+            <input type="text" id="activeNoteInput" placeholder="執行過程細節、客戶備註..."
+              class="w-full text-xs px-3 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          </div>
+        </div>
+
+        <!-- 右邊: 碼錶顯示與操作按鈕 -->
+        <div class="md:col-span-7 flex flex-col items-center justify-center p-4 bg-slate-50 border border-slate-200 rounded-xl">
+          <div id="timerDisplay" class="text-5xl md:text-6xl font-mono font-bold tracking-tight text-slate-800 my-2">
+            00:00:00
+          </div>
+          <div id="timerStatusNotice" class="text-xs font-medium text-slate-400 mb-4 h-4">
+            準備就緒，點擊開始
+          </div>
+
+          <div class="flex items-center gap-3">
+            <button id="startBtn" onclick="startTimer()" class="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm rounded-xl shadow-sm transition flex items-center gap-2">
+              <span>▶</span> 開始計時
+            </button>
+            <button id="pauseBtn" onclick="pauseTimer()" disabled class="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold text-sm rounded-xl shadow-sm transition flex items-center gap-2">
+              <span>⏸</span> 暫停
+            </button>
+            <button id="stopBtn" onclick="stopAndLogTimer()" disabled class="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold text-sm rounded-xl shadow-sm transition flex items-center gap-2">
+              <span>⏹</span> 完成並記錄
+            </button>
+            <button onclick="resetTimer()" class="px-3 py-2.5 text-xs text-slate-500 hover:text-slate-700 hover:bg-slate-200 rounded-lg transition">
+              重設
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- 區塊 3: 數據分析看板 (Analytics) -->
+    <section class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+        <span class="text-xs font-semibold text-slate-400">今日總投入時數</span>
+        <div class="text-2xl font-bold text-slate-900 my-1"><span id="statTodayHours">0.0</span> <span class="text-sm font-normal text-slate-500">小時</span></div>
+        <span class="text-[11px] text-slate-400" id="statTodayCount">共 0 條執行記錄</span>
+      </div>
+      <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+        <span class="text-xs font-semibold text-slate-400">待辦完成進度 (Today)</span>
+        <div class="text-2xl font-bold text-indigo-600 my-1"><span id="statTaskProgress">0%</span></div>
+        <span class="text-[11px] text-slate-400" id="statTaskDetail">0 / 0 個今日任務已完成</span>
+      </div>
+      <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+        <span class="text-xs font-semibold text-slate-400">雲端狀態 (Google Sheets)</span>
+        <div class="text-sm font-semibold text-slate-700 my-1 flex items-center gap-2">
+          <span id="cloudStatusDot" class="w-2.5 h-2.5 rounded-full bg-slate-300"></span>
+          <span id="cloudStatusLabel">未設定 API</span>
+        </div>
+        <span class="text-[11px] text-slate-400" id="cloudLastSyncTime">尚未同步</span>
+      </div>
+    </section>
+
+    <!-- 區塊 4: 任務分佈圖表與歷史日誌 (Charts & History Logs) -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      
+      <!-- 圖表 -->
+      <div class="lg:col-span-5 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+        <h3 class="text-sm font-bold text-slate-800 mb-3 flex items-center justify-between">
+          <span>📊 任務時間分佈 (Top Tasks)</span>
+        </h3>
+        <div class="h-56 relative flex items-center justify-center">
+          <canvas id="taskDistributionChart"></canvas>
+        </div>
+      </div>
+
+      <!-- 執行歷史紀錄表 -->
+      <div class="lg:col-span-7 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col">
+        <div class="flex justify-between items-center mb-3">
+          <h3 class="text-sm font-bold text-slate-800 flex items-center gap-2">
+            <span>📝</span> 時間日誌記錄 (Time Logs)
+          </h3>
+          <button onclick="clearAllLogs()" class="text-xs text-rose-500 hover:text-rose-700">清空本地記錄</button>
+        </div>
+
+        <div class="flex-1 overflow-x-auto max-h-[300px] border border-slate-100 rounded-lg">
+          <table class="w-full text-left text-xs text-slate-600">
+            <thead class="bg-slate-50 text-slate-500 sticky top-0 border-b border-slate-200">
+              <tr>
+                <th class="py-2 px-3">時間</th>
+                <th class="py-2 px-3">任務</th>
+                <th class="py-2 px-3">耗時</th>
+                <th class="py-2 px-3">備註</th>
+                <th class="py-2 px-3 text-right">操作</th>
+              </tr>
+            </thead>
+            <tbody id="logTableBody" class="divide-y divide-slate-100">
+              <!-- 動態渲染日誌 -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- Google Sheets 串接設定彈窗 (Modal) -->
+  <div id="cloudModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 space-y-4">
+      <div class="flex justify-between items-center pb-2 border-b border-slate-100">
+        <h3 class="text-base font-bold text-slate-900">🔗 串接 Google Sheets</h3>
+        <button onclick="toggleCloudModal()" class="text-slate-400 hover:text-slate-600 text-lg">✕</button>
+      </div>
+      <p class="text-xs text-slate-500 leading-relaxed">
+        透過 Google Apps Script 建立 Web App，將網址填入下方。之後只要完成計時，記錄同任務清單就會自動同步至 Google Sheets，喺任何裝置開啟都能存取同一批資料。
+      </p>
+
+      <div class="space-y-3">
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Google Apps Script Web App URL</label>
+          <input type="url" id="gasUrlInput" placeholder="https://script.google.com/macros/s/.../exec"
+            class="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        </div>
+      </div>
+
+      <div class="bg-slate-50 p-3 rounded-lg border border-slate-200 text-[11px] text-slate-600 space-y-1">
+        <div class="font-bold text-slate-700">簡易設定步驟：</div>
+        <div>1. 開一張 Google Sheets，點「擴充功能」→「Apps Script」</div>
+        <div>2. 貼入配套的後端代碼並儲存</div>
+        <div>3. 點「部署」→「新部署」→ 類型揀「網頁應用程式 (Web App)」</div>
+        <div>4. 存取權限揀「任何人 (Anyone)」，複製生成的 URL 貼喺上方</div>
+      </div>
+
+      <div class="flex justify-end gap-2 pt-2">
+        <button onclick="toggleCloudModal()" class="px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-lg">取消</button>
+        <button onclick="saveCloudSettings()" class="px-4 py-2 text-xs font-semibold bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg">儲存並測試同步</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // --- 核心資料狀態 ---
+    let tasks = JSON.parse(localStorage.getItem('timeTracker_tasks') || '[]');
+    let timeLogs = JSON.parse(localStorage.getItem('timeTracker_logs') || '[]');
+    let cloudConfig = JSON.parse(localStorage.getItem('timeTracker_cloud') || '{"url":""}');
+
+    let activePlannedTaskId = null;
+    let timerInterval = null;
+    let timerSeconds = 0;
+    let isTimerRunning = false;
+    let chartInstance = null;
+
+    // --- 初始化 ---
+    window.addEventListener('DOMContentLoaded', () => {
+      initChart();
+      renderTasks();
+      renderTimerTaskSelect();
+      renderLogs();
+      updateDashboardStats();
+      updateCloudUI();
+
+      if (cloudConfig.url) {
+        syncFromCloud(true); // 自動同步
+      }
+    });
+
+    // --- 任務池邏輯 (Today vs Backlog) ---
+    function setQuickTask(title) {
+      document.getElementById('taskTitleInput').value = title;
+    }
+
+    function handleAddTask(e) {
+      e.preventDefault();
+      const titleInput = document.getElementById('taskTitleInput');
+      const detailsInput = document.getElementById('taskDetailsInput');
+      const targetList = document.getElementById('taskTargetList').value;
+
+      const title = titleInput.value.trim();
+      if (!title) return;
+
+      const newTask = {
+        id: 'task_' + Date.now(),
+        title: title,
+        details: detailsInput.value.trim(),
+        status: targetList, // 'today' or 'backlog'
+        done: false,
+        createdAt: new Date().toISOString()
+      };
+
+      tasks.unshift(newTask);
+      saveTasks();
+      
+      titleInput.value = '';
+      detailsInput.value = '';
+
+      renderTasks();
+      renderTimerTaskSelect();
+      updateDashboardStats();
+      triggerCloudSync();
+    }
+
+    function moveToToday(taskId) {
+      const t = tasks.find(x => x.id === taskId);
+      if (t) {
+        t.status = 'today';
+        saveTasks();
+        renderTasks();
+        renderTimerTaskSelect();
+        updateDashboardStats();
+        triggerCloudSync();
+      }
+    }
+
+    function moveToBacklog(taskId) {
+      const t = tasks.find(x => x.id === taskId);
+      if (t) {
+        t.status = 'backlog';
+        saveTasks();
+        renderTasks();
+        renderTimerTaskSelect();
+        updateDashboardStats();
+        triggerCloudSync();
+      }
+    }
+
+    function toggleTaskDone(taskId) {
+      const t = tasks.find(x => x.id === taskId);
+      if (t) {
+        t.done = !t.done;
+        saveTasks();
+        renderTasks();
+        updateDashboardStats();
+        triggerCloudSync();
+      }
+    }
+
+    function deleteTask(taskId) {
+      if (confirm('確定刪除此任務？')) {
+        tasks = tasks.filter(x => x.id !== taskId);
+        if (activePlannedTaskId === taskId) {
+          activePlannedTaskId = null;
+          document.getElementById('activeTaskInput').value = '';
+          document.getElementById('activeNoteInput').value = '';
+        }
+        saveTasks();
+        renderTasks();
+        renderTimerTaskSelect();
+        updateDashboardStats();
+        triggerCloudSync();
+      }
+    }
+
+    function loadTaskIntoTimer(taskId) {
+      const t = tasks.find(x => x.id === taskId);
+      if (!t) return;
+      activePlannedTaskId = t.id;
+      document.getElementById('activeTaskInput').value = t.title;
+      document.getElementById('activeNoteInput').value = t.details || '';
+      document.getElementById('timerTaskSelect').value = t.id;
+      document.getElementById('timerStatusNotice').innerText = `已載入任務: ${t.title}`;
+      window.scrollTo({ top: document.querySelector('main').offsetTop + 200, behavior: 'smooth' });
+    }
+
+    function renderTasks() {
+      const todayListEl = document.getElementById('todayTaskList');
+      const backlogListEl = document.getElementById('backlogTaskList');
+      
+      const todayTasks = tasks.filter(t => t.status === 'today');
+      const backlogTasks = tasks.filter(t => t.status === 'backlog');
+
+      document.getElementById('todayCount').innerText = todayTasks.length;
+      document.getElementById('backlogCount').innerText = backlogTasks.length;
+
+      // 渲染 Today
+      if (todayTasks.length === 0) {
+        todayListEl.innerHTML = `<div class="text-center py-8 text-xs text-slate-400">今日暫無待辦，可從右邊將任務移入或直接新增</div>`;
+      } else {
+        todayListEl.innerHTML = todayTasks.map(t => `
+          <div class="p-2.5 rounded-lg border ${t.done ? 'bg-slate-100 border-slate-200 opacity-60' : 'bg-white border-indigo-200/80 shadow-xs'} flex items-start justify-between gap-2">
+            <div class="flex items-start gap-2 flex-1 min-w-0">
+              <input type="checkbox" ${t.done ? 'checked' : ''} onchange="toggleTaskDone('${t.id}')" class="mt-1 rounded text-indigo-600 focus:ring-0">
+              <div class="min-w-0">
+                <div class="text-xs font-semibold ${t.done ? 'line-through text-slate-400' : 'text-slate-800'} truncate">${escapeHtml(t.title)}</div>
+                ${t.details ? `<div class="text-[11px] text-slate-400 truncate">\${escapeHtml(t.details)}</div>` : ''}
+              </div>
+            </div>
+            <div class="flex items-center gap-1 shrink-0">
+              <button onclick="loadTaskIntoTimer('${t.id}')" title="載入計時" class="px-2 py-1 text-[11px] font-medium bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded">
+                ⏱️ 計時
+              </button>
+              <button onclick="moveToBacklog('${t.id}')" title="移至稍後待辦" class="p-1 text-slate-400 hover:text-amber-600">
+                📥
+              </button>
+              <button onclick="deleteTask('${t.id}')" title="刪除" class="p-1 text-slate-300 hover:text-rose-500">
+                ✕
+              </button>
+            </div>
+          </div>
+        `).join('');
+      }
+
+      // 渲染 Backlog
+      if (backlogTasks.length === 0) {
+        backlogListEl.innerHTML = `<div class="text-center py-8 text-xs text-slate-400">Backlog 暫無任務</div>`;
+      } else {
+        backlogListEl.innerHTML = backlogTasks.map(t => `
+          <div class="p-2.5 rounded-lg border bg-white border-slate-200 shadow-xs flex items-start justify-between gap-2">
+            <div class="min-w-0 flex-1">
+              <div class="text-xs font-semibold text-slate-700 truncate">${escapeHtml(t.title)}</div>
+              ${t.details ? `<div class="text-[11px] text-slate-400 truncate">\${escapeHtml(t.details)}</div>` : ''}
+            </div>
+            <div class="flex items-center gap-1 shrink-0">
+              <button onclick="moveToToday('${t.id}')" class="px-2 py-1 text-[11px] font-medium bg-amber-50 text-amber-700 hover:bg-amber-100 rounded flex items-center gap-1">
+                📌 今日做
+              </button>
+              <button onclick="deleteTask('${t.id}')" title="刪除" class="p-1 text-slate-300 hover:text-rose-500">
+                ✕
+              </button>
+            </div>
+          </div>
+        `).join('');
+      }
+    }
+
+    function renderTimerTaskSelect() {
+      const select = document.getElementById('timerTaskSelect');
+      const todayTasks = tasks.filter(t => t.status === 'today' && !t.done);
+      
+      let html = `<option value="">-- 自訂或自由輸入 --</option>`;
+      todayTasks.forEach(t => {
+        html += `<option value="${t.id}">${escapeHtml(t.title)}</option>`;
+      });
+      select.innerHTML = html;
+      if (activePlannedTaskId) {
+        select.value = activePlannedTaskId;
+      }
+    }
+
+    function handleSelectPlannedTask(taskId) {
+      if (!taskId) {
+        activePlannedTaskId = null;
+        document.getElementById('activeTaskInput').value = '';
+        document.getElementById('activeNoteInput').value = '';
+        return;
+      }
+      loadTaskIntoTimer(taskId);
+    }
+
+    function saveTasks() {
+      localStorage.setItem('timeTracker_tasks', JSON.stringify(tasks));
+    }
+
+    // --- 極簡碼錶計時邏輯 ---
+    function formatTime(totalSec) {
+      const h = String(Math.floor(totalSec / 3600)).padStart(2, '0');
+      const m = String(Math.floor((totalSec % 3600) / 60)).padStart(2, '0');
+      const s = String(totalSec % 60).padStart(2, '0');
+      return `${h}:${m}:${s}`;
+    }
+
+    function updateTimerDisplay() {
+      document.getElementById('timerDisplay').innerText = formatTime(timerSeconds);
+    }
+
+    function startTimer() {
+      const taskTitle = document.getElementById('activeTaskInput').value.trim();
+      if (!taskTitle) {
+        alert('請先輸入或從清單中選擇任務名稱！');
+        document.getElementById('activeTaskInput').focus();
+        return;
+      }
+
+      if (isTimerRunning) return;
+      isTimerRunning = true;
+      document.getElementById('startBtn').disabled = true;
+      document.getElementById('pauseBtn').disabled = false;
+      document.getElementById('stopBtn').disabled = false;
+      document.getElementById('timerStatusNotice').innerText = `正在專注：${taskTitle}`;
+
+      timerInterval = setInterval(() => {
+        timerSeconds++;
+        updateTimerDisplay();
+      }, 1000);
+    }
+
+    function pauseTimer() {
+      if (!isTimerRunning) return;
+      isTimerRunning = false;
+      clearInterval(timerInterval);
+      document.getElementById('startBtn').disabled = false;
+      document.getElementById('pauseBtn').disabled = true;
+      document.getElementById('timerStatusNotice').innerText = '計時已暫停';
+    }
+
+    function resetTimer() {
+      if (isTimerRunning && !confirm('計時進行中，確定要重設歸零？')) return;
+      clearInterval(timerInterval);
+      isTimerRunning = false;
+      timerSeconds = 0;
+      updateTimerDisplay();
+      document.getElementById('startBtn').disabled = false;
+      document.getElementById('pauseBtn').disabled = true;
+      document.getElementById('stopBtn').disabled = true;
+      document.getElementById('timerStatusNotice').innerText = '準備就緒，點擊開始';
+    }
+
+    function stopAndLogTimer() {
+      if (timerSeconds < 5) {
+        alert('記錄時間過短（少於 5 秒），未作保存。');
+        resetTimer();
+        return;
+      }
+
+      const taskTitle = document.getElementById('activeTaskInput').value.trim() || '未命名任務';
+      const taskNote = document.getElementById('activeNoteInput').value.trim();
+      const durationHours = (timerSeconds / 3600).toFixed(2);
+
+      const logItem = {
+        id: 'log_' + Date.now(),
+        task: taskTitle,
+        seconds: timerSeconds,
+        hours: parseFloat(durationHours),
+        note: taskNote,
+        timestamp: new Date().toISOString(),
+        dateStr: new Date().toLocaleDateString('zh-HK')
+      };
+
+      timeLogs.unshift(logItem);
+      localStorage.setItem('timeTracker_logs', JSON.stringify(timeLogs));
+
+      // 若有綁定任務，詢問是否標記為 Done
+      if (activePlannedTaskId) {
+        const t = tasks.find(x => x.id === activePlannedTaskId);
+        if (t && confirm(`已記錄 ${durationHours} 小時！是否將「${t.title}」標記為已完成 (Done)？`)) {
+          t.done = true;
+          saveTasks();
+        }
+      }
+
+      resetTimer();
+      renderTasks();
+      renderTimerTaskSelect();
+      renderLogs();
+      updateDashboardStats();
+      triggerCloudSync();
+    }
+
+    // --- 日誌與統計呈現 ---
+    function renderLogs() {
+      const tbody = document.getElementById('logTableBody');
+      if (timeLogs.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="5" class="py-6 text-center text-slate-400">暫無時間記錄</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = timeLogs.map(l => {
+        const timeStr = new Date(l.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const dateStr = new Date(l.timestamp).toLocaleDateString([], { month: 'numeric', day: 'numeric' });
+        return `
+          <tr class="hover:bg-slate-50 transition">
+            <td class="py-2.5 px-3 text-slate-400 text-[11px]">${dateStr} ${timeStr}</td>
+            <td class="py-2.5 px-3 font-semibold text-slate-800">${escapeHtml(l.task)}</td>
+            <td class="py-2.5 px-3 font-mono font-medium text-indigo-600">${l.hours}h</td>
+            <td class="py-2.5 px-3 text-slate-500 text-[11px] truncate max-w-[150px]">${escapeHtml(l.note || '-')}</td>
+            <td class="py-2.5 px-3 text-right">
+              <button onclick="deleteLog('${l.id}')" class="text-slate-300 hover:text-rose-500">✕</button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function deleteLog(logId) {
+      if (confirm('確定刪除此日誌？')) {
+        timeLogs = timeLogs.filter(x => x.id !== logId);
+        localStorage.setItem('timeTracker_logs', JSON.stringify(timeLogs));
+        renderLogs();
+        updateDashboardStats();
+        triggerCloudSync();
+      }
+    }
+
+    function clearAllLogs() {
+      if (confirm('確定清空所有本地日誌？此操作不可還原！')) {
+        timeLogs = [];
+        localStorage.setItem('timeTracker_logs', JSON.stringify(timeLogs));
+        renderLogs();
+        updateDashboardStats();
+        triggerCloudSync();
+      }
+    }
+
+    function updateDashboardStats() {
+      const todayStr = new Date().toLocaleDateString('zh-HK');
+      const todayLogs = timeLogs.filter(l => new Date(l.timestamp).toLocaleDateString('zh-HK') === todayStr);
+      const totalHoursToday = todayLogs.reduce((sum, l) => sum + (l.hours || 0), 0);
+
+      document.getElementById('statTodayHours').innerText = totalHoursToday.toFixed(1);
+      document.getElementById('statTodayCount').innerText = `共 ${todayLogs.length} 條執行記錄`;
+
+      // 任務進度
+      const todayTasks = tasks.filter(t => t.status === 'today');
+      const completedToday = todayTasks.filter(t => t.done).length;
+      const percent = todayTasks.length > 0 ? Math.round((completedToday / todayTasks.length) * 100) : 0;
+
+      document.getElementById('statTaskProgress').innerText = `${percent}%`;
+      document.getElementById('statTaskDetail').innerText = `${completedToday} / ${todayTasks.length} 個今日任務已完成`;
+
+      updateChart();
+    }
+
+    // --- Chart.js 圖表更新 ---
+    function initChart() {
+      const ctx = document.getElementById('taskDistributionChart').getContext('2d');
+      chartInstance = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: ['無數據'],
+          datasets: [{
+            data: [1],
+            backgroundColor: ['#e2e8f0']
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } }
+          },
+          cutout: '68%'
+        }
+      });
+    }
+
+    function updateChart() {
+      if (!chartInstance) return;
+
+      const taskAgg = {};
+      timeLogs.forEach(l => {
+        taskAgg[l.task] = (taskAgg[l.task] || 0) + (l.hours || 0);
+      });
+
+      const labels = Object.keys(taskAgg);
+      const data = Object.values(taskAgg);
+
+      if (labels.length === 0) {
+        chartInstance.data.labels = ['暫無數據'];
+        chartInstance.data.datasets[0].data = [1];
+        chartInstance.data.datasets[0].backgroundColor = ['#e2e8f0'];
+      } else {
+        const colors = [
+          '#6366f1', '#ec4899', '#f59e0b', '#10b981', '#3b82f6',
+          '#8b5cf6', '#14b8a6', '#f97316', '#64748b'
+        ];
+        chartInstance.data.labels = labels;
+        chartInstance.data.datasets[0].data = data;
+        chartInstance.data.datasets[0].backgroundColor = colors.slice(0, labels.length);
+      }
+      chartInstance.update();
+    }
+
+    // --- CSV 匯出 ---
+    function exportCSV() {
+      if (timeLogs.length === 0) {
+        alert('目前無日誌可匯出。');
+        return;
+      }
+      let csvContent = "data:text/csv;charset=utf-8,\uFEFF";
+      csvContent += "ID,日期時間,任務名稱,耗時(小時),耗時(秒),細節備註\n";
+
+      timeLogs.forEach(l => {
+        csvContent += `"${l.id}","${l.timestamp}","${l.task.replace(/"/g, '""')}",${l.hours},${l.seconds},"${(l.note || '').replace(/"/g, '""')}"\n`;
+      });
+
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", `Time_Tracker_Logs_${new Date().toISOString().slice(0,10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    // --- Google Sheets (GAS API) 串接邏輯 ---
+    function toggleCloudModal() {
+      const modal = document.getElementById('cloudModal');
+      document.getElementById('gasUrlInput').value = cloudConfig.url || '';
+      modal.classList.toggle('hidden');
+    }
+
+    function saveCloudSettings() {
+      const url = document.getElementById('gasUrlInput').value.trim();
+      cloudConfig.url = url;
+      localStorage.setItem('timeTracker_cloud', JSON.stringify(cloudConfig));
+      toggleCloudModal();
+      updateCloudUI();
+      if (url) syncFromCloud();
+    }
+
+    function updateCloudUI() {
+      const icon = document.getElementById('cloudIcon');
+      const text = document.getElementById('cloudText');
+      const dot = document.getElementById('cloudStatusDot');
+      const label = document.getElementById('cloudStatusLabel');
+
+      if (cloudConfig.url) {
+        icon.className = 'w-2 h-2 rounded-full bg-emerald-500';
+        text.innerText = 'Sheets 已連線';
+        dot.className = 'w-2.5 h-2.5 rounded-full bg-emerald-500';
+        label.innerText = '已綁定 Google Sheets';
+      } else {
+        icon.className = 'w-2 h-2 rounded-full bg-slate-400';
+        text.innerText = '設定 Google Sheets';
+        dot.className = 'w-2.5 h-2.5 rounded-full bg-slate-300';
+        label.innerText = '未綁定 API';
+      }
+    }
+
+    // 自動同步 (防抖 Debounce)
+    let syncTimeout = null;
+    function triggerCloudSync() {
+      if (!cloudConfig.url) return;
+      clearTimeout(syncTimeout);
+      syncTimeout = setTimeout(() => {
+        pushToCloud();
+      }, 1000);
+    }
+
+    // 推送本地資料到 Google Sheets
+    async function pushToCloud() {
+      if (!cloudConfig.url) return;
+      try {
+        document.getElementById('cloudLastSyncTime').innerText = '正在上傳...';
+        await fetch(cloudConfig.url, {
+          method: 'POST',
+          mode: 'no-cors', // 配合 GAS Web App 重定向
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'pushAll',
+            tasks: tasks,
+            timeLogs: timeLogs,
+            updatedAt: new Date().toISOString()
+          })
+        });
+        document.getElementById('cloudLastSyncTime').innerText = `已上傳: ${new Date().toLocaleTimeString()}`;
+      } catch (err) {
+        console.error('Push to cloud error:', err);
+        document.getElementById('cloudLastSyncTime').innerText = '上傳失敗，檢查連線';
+      }
+    }
+
+    // 從 Google Sheets 下拉數據 (跨裝置合併)
+    async function syncFromCloud(silent = false) {
+      if (!cloudConfig.url) {
+        if (!silent) toggleCloudModal();
+        return;
+      }
+
+      try {
+        document.getElementById('cloudLastSyncTime').innerText = '正在拉取...';
+        const res = await fetch(`${cloudConfig.url}?action=getAll`);
+        const data = await res.json();
+
+        if (data && data.status === 'success') {
+          if (Array.isArray(data.tasks)) tasks = data.tasks;
+          if (Array.isArray(data.timeLogs)) timeLogs = data.timeLogs;
+
+          saveTasks();
+          localStorage.setItem('timeTracker_logs', JSON.stringify(timeLogs));
+
+          renderTasks();
+          renderTimerTaskSelect();
+          renderLogs();
+          updateDashboardStats();
+          document.getElementById('cloudLastSyncTime').innerText = `同步成功: ${new Date().toLocaleTimeString()}`;
+        }
+      } catch (err) {
+        console.error('Fetch cloud error:', err);
+        document.getElementById('cloudLastSyncTime').innerText = '讀取失敗 (請確認 GAS 權限)';
+      }
+    }
+
+    function escapeHtml(str) {
+      return (str || '').replace(/[&<>'"]/g, tag => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+      }[tag] || tag));
+    }
+  </script>
+</body>
+</html>
